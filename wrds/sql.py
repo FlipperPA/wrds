@@ -44,7 +44,7 @@ class Connection(object):
             *autoconnect*: If false will not immediately establish the connection
 
         The constructor will use the .pgpass file if it exists and may make use of
-        PostgreSQL environment variables such as PGHOST, PGUSER, etc., if cooresponding
+        PostgreSQL environment variables such as PGHOST, PGUSER, etc., if corresponding
         parameters are not set.
         If not, it will ask the user for a username and password.
         It will also direct the user to information on setting up .pgpass.
@@ -212,7 +212,7 @@ ORDER BY 1;
             uname = self._username
         else:
             uname = getpass.getuser()
-        username = input("Enter your WRDS username [{}]:".format(uname))
+        username = input(f"Enter your WRDS username [{uname}]:")
         if not username:
             username = uname
         passwd = getpass.getpass("Enter your password:")
@@ -259,8 +259,9 @@ ORDER BY 1;
             os.mkdir(pgdir)
         # Path exists, but is not a directory
         elif not os.path.isdir(pgdir):
-            err = "Cannot create directory {}: " "path exists but is not a directory"
-            raise FileExistsError(err.format(pgdir))
+            raise FileExistsError(
+                f"Cannot create directory {pgdir}: path exists but is not a directory."
+            )
         pgfile = pgdir + os.path.sep + "pgpass.conf"
         # Write the pgpass.conf file without clobbering
         self.__write_pgpass_file(pgfile)
@@ -370,10 +371,10 @@ ORDER BY 1;
             if schema in self.insp.get_schema_names():
                 raise NotSubscribedError(
                     "You do not have permission to access "
-                    "the {} library".format(schema)
+                    f"the {schema} library."
                 )
             else:
-                raise SchemaNotFoundError("The {} library is not found.".format(schema))
+                raise SchemaNotFoundError(f"The {schema} library is not found.")
 
     def list_libraries(self):
         """
@@ -411,26 +412,26 @@ ORDER BY 1;
         """
         Internal function for getting the schema based on a view
         """
-        sql_code = """SELECT distinct(source_ns.nspname) AS source_schema
-                      FROM pg_depend
-                      JOIN pg_rewrite
-                        ON pg_depend.objid = pg_rewrite.oid
-                      JOIN pg_class as dependent_view
-                        ON pg_rewrite.ev_class = dependent_view.oid
-                      JOIN pg_class as source_table
-                        ON pg_depend.refobjid = source_table.oid
-                      JOIN pg_attribute
-                        ON pg_depend.refobjid = pg_attribute.attrelid
-                          AND pg_depend.refobjsubid = pg_attribute.attnum
-                      JOIN pg_namespace dependent_ns
-                        ON dependent_ns.oid = dependent_view.relnamespace
-                      JOIN pg_namespace source_ns
-                        ON source_ns.oid = source_table.relnamespace
-                      WHERE dependent_ns.nspname = '{schema}'
-                        AND dependent_view.relname = '{view}';
-                    """.format(
-            schema=schema, view=table
-        )
+        sql_code = f"""
+            SELECT DISTINCT(source_ns.nspname) AS source_schema
+            FROM pg_depend
+            JOIN pg_rewrite
+                ON pg_depend.objid = pg_rewrite.oid
+            JOIN pg_class AS dependent_view
+                ON pg_rewrite.ev_class = dependent_view.oid
+            JOIN pg_class AS source_table
+                ON pg_depend.refobjid = source_table.oid
+            JOIN pg_attribute
+                ON pg_depend.refobjid = pg_attribute.attrelid
+                AND pg_depend.refobjsubid = pg_attribute.attnum
+            JOIN pg_namespace dependent_ns
+                ON dependent_ns.oid = dependent_view.relnamespace
+            JOIN pg_namespace source_ns
+                ON source_ns.oid = source_table.relnamespace
+            WHERE dependent_ns.nspname = '{schema}'
+                AND dependent_view.relname = '{table}'
+        """
+
         if self.__check_schema_perms(schema):
             if version.parse(sa.__version__) > version.parse("2"):
                 result = self.connection.exec_driver_sql(sql_code)
@@ -460,7 +461,7 @@ ORDER BY 1;
               5    fname     True  VARCHAR
         """
         rows = self.get_row_count(library, table)
-        print("Approximately {} rows in {}.{}.".format(rows, library, table))
+        print(f"Approximately {rows} rows in {library}.{table}.")
         table_info = pd.DataFrame.from_dict(
             self.insp.get_columns(table, schema=library)
         )
@@ -481,9 +482,10 @@ ORDER BY 1;
         """
 
         sqlstmt = """
-            EXPLAIN (FORMAT 'json')  SELECT 1 FROM {}.{} ;
+            EXPLAIN (FORMAT 'json')  SELECT 1 FROM {}.{}
         """.format(
-            sa.sql.quoted_name(library, True), sa.sql.quoted_name(table, True)
+            sa.sql.quoted_name(library, True),
+            sa.sql.quoted_name(table, True),
         )
 
         try:
@@ -493,7 +495,7 @@ ORDER BY 1;
                 result = self.connection.execute(sqlstmt)
             return int(result.fetchone()[0][0]["Plan"]["Plan Rows"])
         except Exception as e:
-            print("There was a problem with retrieving the row count: {}".format(e))
+            print(f"There was a problem with retrieving the row count: {e}")
             return 0
 
     def raw_sql(
@@ -650,20 +652,14 @@ ORDER BY 1;
         if rows < 0:
             rowsstmt = ""
         else:
-            rowsstmt = " LIMIT {}".format(rows)
+            rowsstmt = f" LIMIT {rows}"
         if columns is None:
             cols = "*"
         else:
             cols = ",".join(columns)
         if self.__check_schema_perms(library):
             sqlstmt = (
-                "SELECT {cols} FROM {schema}.{table} {rowsstmt} OFFSET {offset}".format(
-                    cols=cols,
-                    schema=library,
-                    table=table,
-                    rowsstmt=rowsstmt,
-                    offset=offset,
-                )
+                f"SELECT {cols} FROM {library}.{table} {rowsstmt} OFFSET {offset}"
             )
             return self.raw_sql(
                 sqlstmt,
